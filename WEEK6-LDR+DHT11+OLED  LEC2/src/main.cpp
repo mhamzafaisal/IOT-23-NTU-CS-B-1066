@@ -1,110 +1,70 @@
 /*
-  Project: LDR + DHT22 Sensor with OLED Display
-  Name: M.HAMZA FAISAL
-  Reg No: 23-NTU-CS-1066
-  Date: 21-Oct-2025
+  Project: Button Press Detection (Short/Long Press)
+  Name: Umar Mushtaq
+  Reg No: CS-B1077
+  Date: 19-Oct-2025
 */
 
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <DHT.h>
 
-// --- Pin Configuration ---
-#define LDR_PIN 34        // LDR connected to analog pin
-#define DHTPIN 14         // DHT22 data pin
-#define DHTTYPE DHT22     // DHT sensor type
+// --- Pin Definitions ---
+#define BTN 25       // Button pin
+#define LED 5        // LED pin
+#define BUZZER 18   // Buzzer pin
 
-#define SDA_PIN 21        // I2C SDA pin for OLED
-#define SCL_PIN 22        // I2C SCL pin for OLED
+// --- OLED Display Setup (I2C) ---
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
 
-// --- OLED Setup ---
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+// --- Variables ---
+bool ledState = false;           // to store LED ON/OFF state
+unsigned long pressTime = 0;     // to store the time when button is pressed
+bool pressed = false;            // flag to check button press status
 
-// --- DHT Sensor Setup ---
-DHT dht(DHTPIN, DHTTYPE);
-
-// --- Setup Function ---
-void setup() {
-  Serial.begin(115200);
-  Serial.println("ESP32 LDR + DHT22 + OLED Demo");
-
-  // Initialize I2C on custom pins
-  Wire.begin(SDA_PIN, SCL_PIN);
-
-  // Initialize OLED display
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println("OLED initialization failed!");
-    for (;;);
-  }
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
+// --- Function to show text on OLED ---
+void showText(String msg) {
+  display.clearDisplay();         // clear old text
   display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("Initializing Sensors...");
-  display.display();
-
-  // Initialize DHT Sensor
-  dht.begin();
-  delay(1500);
+  display.setTextColor(WHITE);
+  display.setCursor(0, 20);       // position for message
+  display.println(msg);           // print message
+  display.display();              // update OLED screen
 }
 
-// --- Main Loop ---
+void setup() {
+  pinMode(BTN, INPUT_PULLUP);     // button as input with internal pull-up
+  pinMode(LED, OUTPUT);           // LED as output
+  pinMode(BUZZER, OUTPUT);        // buzzer as output
+
+  // --- Initialize the OLED Display ---
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  showText("Ready...");           // startup message
+}
+
 void loop() {
-  // --- Read LDR Sensor ---
-  int adcValue = analogRead(LDR_PIN);
-  float voltage = (adcValue / 4095.0) * 3.3;
-
-  // --- Read DHT22 Sensor ---
-  float temperature = dht.readTemperature();
-  float humidity = dht.readHumidity();
-
-  // --- Check for DHT read failure ---
-  if (isnan(temperature) || isnan(humidity)) {
-    Serial.println("Error reading from DHT22!");
-    display.clearDisplay();
-    display.setCursor(0, 0);
-    display.println("DHT22 Error!");
-    display.display();
-    delay(2000);
-    return;
+  // --- Check if button is pressed down ---
+  if (digitalRead(BTN) == LOW && !pressed) {
+    pressed = true;               // mark button as pressed
+    pressTime = millis();         // save press start time
   }
 
-  // --- Serial Monitor Output ---
-  Serial.println("===== Sensor Readings =====");
-  Serial.printf("LDR ADC: %d | Voltage: %.2f V\n", adcValue, voltage);
-  Serial.printf("Temperature: %.2f °C | Humidity: %.2f %%\n", temperature, humidity);
-  Serial.println("===========================\n");
+  // --- Check if button is released ---
+  if (digitalRead(BTN) == HIGH && pressed) {
+    unsigned long duration = millis() - pressTime;   // calculate how long it was held
+    pressed = false;              // reset press flag
 
-  // --- OLED Display Output ---
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("IoT Sensor Readings");
-
-  display.setCursor(0, 14);
-  display.print("LDR ADC: ");
-  display.println(adcValue);
-
-  display.setCursor(0, 26);
-  display.print("Voltage: ");
-  display.print(voltage, 2);
-  display.println(" V");
-
-  display.setCursor(0, 40);
-  display.print("Temp: ");
-  display.print(temperature, 1);
-  display.println(" C");
-
-  display.setCursor(0, 52);
-  display.print("Humidity: ");
-  display.print(humidity, 1);
-  display.println(" %");
-
-  display.display();
-
-  delay(2000); // Update every 2 seconds
+    // --- Long Press Detection (>1.5s) ---
+    if (duration > 1500) {
+      tone(BUZZER, 1000, 500);    // play buzzer tone
+      showText("Long Press → Buzzer");
+    } 
+    // --- Short Press Detection ---
+    else {
+      ledState = !ledState;       // toggle LED state
+      digitalWrite(LED, ledState);
+      showText("Short Press → LED Toggle");
+    }
+  }
 }
